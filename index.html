@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Contrails Vigo</title>
+<title>Estelas Vigo</title>
 <style>
 body{
   margin:0;
@@ -13,7 +13,7 @@ body{
   padding-top:20px;
 }
 h2{
-  margin:0 0 10px 0;
+  margin:0 0 4px 0;
   font-size:26px;
   text-decoration:underline;
 }
@@ -32,15 +32,43 @@ h2{
 <h2>Estelas en Vigo</h2>
 <div id="estado" class="small">Cargando...</div>
 <div id="datos" style="display:none;">
-  <div class="linea">10 km: <span id="l10">--</span></div>
-  <div class="linea">11 km: <span id="l11">--</span></div>
   <div class="linea">12 km: <span id="l12">--</span></div>
+  <div class="linea">11 km: <span id="l11">--</span></div>
+  <div class="linea">10 km: <span id="l10">--</span></div>
   <br>
   <div class="small">Riesgo general: <span id="risk">--</span></div>
   <div class="small" id="hora"></div>
 </div>
 
 <script>
+// Convierte RH sobre agua → RHi (sobre hielo) con Magnus
+function toRHi(RHw, T_C) {
+  const ew = 6.1078 * Math.exp(17.269 * T_C / (T_C + 237.29));
+  const ei = 6.1078 * Math.exp(21.875 * T_C / (T_C + 265.5));
+  return (RHw / 100) * (ew / ei) * 100;
+}
+
+// CPI: Schumann 1996, umbral 95% por sesgo seco ERA5
+function classify(T, RHw) {
+  const RHi = toRHi(RHw, T);
+  if (T > -40) return "NULA";
+  const ts = T <= -50 ? 3 : T <= -45 ? 2 : 1;
+  const rs = RHi >= 110 ? 4 : RHi >= 100 ? 3 : RHi >= 95 ? 2 : RHi >= 90 ? 1 : 0;
+  const cpi = ts + rs;
+  if (cpi >= 6) return "MUY ALTA";
+  if (cpi >= 5) return "ALTA";
+  if (cpi >= 3) return "MEDIA";
+  if (cpi >= 1) return "BAJA";
+  return "NULA";
+}
+
+function riesgoGeneral(niveles) {
+  for (const r of ["MUY ALTA","ALTA","MEDIA","BAJA","NULA"])
+    if (niveles.includes(r)) return r;
+  return "NULA";
+}
+
+// Vigo: 42.24°N, -8.72°E
 const lat = 42.24;
 const lon = -8.72;
 
@@ -51,64 +79,28 @@ const url =
   +`,relative_humidity_200hPa,relative_humidity_225hPa,relative_humidity_275hPa`
   +`&timezone=Europe%2FMadrid&forecast_days=1`;
 
-// Open-Meteo devuelve RH sobre agua. Convertir a RHi (sobre hielo).
-// Necesario porque el criterio ISSR usa RHi, no RHw.
-// Fórmula Magnus para presión de saturación:
-function toRHi(RHw, T_C) {
-  const ew = 6.1078 * Math.exp(17.269 * T_C / (T_C + 237.29)); // sobre agua
-  const ei = 6.1078 * Math.exp(21.875 * T_C / (T_C + 265.5));  // sobre hielo
-  return (RHw / 100) * (ew / ei) * 100;
-}
-
-// Clasificación CPI basada en literatura (Schumann 1996, ERA5 dry bias 12-25%)
-// Umbral operativo 95% en lugar de 100% por subestimación de modelos
-function classify(T, RHw) {
-  const RHi = toRHi(RHw, T);
-
-  // SAC simplificado: contrail no se forma si T > -40°C
-  if (T > -40) return "NULA";
-
-  // Temperatura score (0-3)
-  const ts = T <= -50 ? 3 : T <= -45 ? 2 : 1;
-
-  // RHi score (0-4) con umbral 95% como proxy ISSR
-  const rs = RHi >= 110 ? 4 : RHi >= 100 ? 3 : RHi >= 95 ? 2 : RHi >= 90 ? 1 : 0;
-
-  const cpi = ts + rs;
-
-  if (cpi >= 6) return "MUY ALTA";
-  if (cpi >= 5) return "ALTA";
-  if (cpi >= 3) return "MEDIA";
-  if (cpi >= 1) return "BAJA";
-  return "NULA";
-}
-
-function riesgoGeneral(niveles) {
-  const orden = ["MUY ALTA","ALTA","MEDIA","BAJA","NULA"];
-  for (const r of orden) {
-    if (niveles.includes(r)) return r;
-  }
-  return "NULA";
-}
-
 fetch(url)
   .then(r => r.json())
   .then(d => {
-    const h    = d.hourly;
+    const h = d.hourly;
     const hora = new Date().getHours();
 
-    const t10 = h.temperature_275hPa[hora],  rh10 = h.relative_humidity_275hPa[hora];
-    const t11 = h.temperature_225hPa[hora],  rh11 = h.relative_humidity_225hPa[hora];
-    const t12 = h.temperature_200hPa[hora],  rh12 = h.relative_humidity_200hPa[hora];
-
-    const r10 = classify(t10, rh10);
-    const r11 = classify(t11, rh11);
+    // 12 km (~200 hPa)
+    const t12 = h.temperature_200hPa[hora], rh12 = h.relative_humidity_200hPa[hora];
     const r12 = classify(t12, rh12);
 
-    document.getElementById("l10").textContent = r10;
-    document.getElementById("l11").textContent = r11;
+    // 11 km (~225 hPa)
+    const t11 = h.temperature_225hPa[hora], rh11 = h.relative_humidity_225hPa[hora];
+    const r11 = classify(t11, rh11);
+
+    // 10 km (~275 hPa)
+    const t10 = h.temperature_275hPa[hora], rh10 = h.relative_humidity_275hPa[hora];
+    const r10 = classify(t10, rh10);
+
     document.getElementById("l12").textContent = r12;
-    document.getElementById("risk").textContent = riesgoGeneral([r10, r11, r12]);
+    document.getElementById("l11").textContent = r11;
+    document.getElementById("l10").textContent = r10;
+    document.getElementById("risk").textContent = riesgoGeneral([r12, r11, r10]);
 
     const now = new Date();
     document.getElementById("hora").textContent =
