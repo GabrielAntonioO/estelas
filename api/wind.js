@@ -107,14 +107,19 @@ export default async function handler(req, res) {
       if (!r.ok) throw new Error(`Open-Meteo estelas ${r.status}`);
       const d = await r.json();
 
+      // Obtener siempre el nombre del lugar (para el título)
+      const locInfo = await getReverseGeocode(lat, lon);
+
       // Guardar ubicación solo si viene del móvil
       if (req.query.lat && req.query.lon && req.query.nosave !== '1') {
-        const locInfo = await getReverseGeocode(lat, lon);
         await saveLocationToJsonBin(lat, lon, locInfo.barrio, locInfo.ciudad);
       }
 
       return res.status(200).json({
-        location: { lat, lon },
+        location: {
+          ciudad: locInfo.ciudad || 'Desconocido',
+          barrio: locInfo.barrio || null,
+        },
         hourly: d.hourly
       });
     }
