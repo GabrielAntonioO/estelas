@@ -196,6 +196,16 @@ async function cargar() {
     const h = json.hourly;
     if (!h?.time) { mostrarError('Sin datos disponibles.'); return; }
 
+    // ── Título con la ciudad/barrio ──
+    if (json.location) {
+      const lugar = json.location.barrio && json.location.ciudad
+        ? `${json.location.barrio}, ${json.location.ciudad}`
+        : json.location.ciudad || 'Desconocido';
+
+      document.title = 'Estelas · ' + lugar;
+      document.getElementById('titulo').textContent = '📍 ESTELAS · ' + lugar.toUpperCase();
+    }
+
     // Hora local Madrid
     const nowLocalStr = new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' });
     const nowLocal    = new Date(nowLocalStr);
