@@ -1,54 +1,134 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Estelas Vigo</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>Estelas</title>
 <style>
-body{
-  margin:0;
-  background:#000;
-  color:#fff;
-  font-family:-apple-system,sans-serif;
-  text-align:center;
-  padding-top:20px;
-}
-h2{
-  margin:0 0 4px 0;
-  font-size:26px;
-  text-decoration:underline;
-}
-.linea{
-  font-size:26px;
-  margin:14px 0;
-}
-.small{
-  opacity:.7;
-  font-size:18px;
-  margin-top:10px;
-}
+  :root{
+    --bg:#000000;
+    --border:#1e1e2a;
+    --font:'SF Mono','Fira Code','Menlo',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    background:var(--bg);
+    color:#fff;
+    font-family:var(--font);
+    text-align:center;
+    padding-top:16px;
+  }
+
+  #titulo{
+    padding:16px 14px 8px;
+    font-size:20px;
+    color:#fff;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    font-weight:700;
+  }
+
+  #estado{
+    padding:24px 14px;
+    text-align:center;
+    color:#555566;
+    font-size:14px;
+    letter-spacing:.1em;
+  }
+
+  .spinner{
+    display:inline-block;width:16px;height:16px;
+    border:2px solid #1e1e2a;border-top-color:#fff;
+    border-radius:50%;animation:spin .8s linear infinite;
+    margin-right:8px;vertical-align:middle;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .error-box{
+    margin:16px 14px;padding:14px;
+    background:#2a0a0a;border:1px solid #5a1a1a;border-radius:6px;
+    color:#ff6b6b;font-size:14px;line-height:1.5;text-align:left;
+  }
+  .retry-btn{
+    margin-top:10px;display:inline-block;padding:8px 16px;
+    background:#3a1010;border:1px solid #7a2020;border-radius:4px;
+    color:#ff9999;cursor:pointer;font-family:var(--font);font-size:14px;
+  }
+
+  #datos{display:none;padding:10px 0 20px;}
+  .linea{
+    font-size:26px;
+    margin:14px 0;
+    font-weight:600;
+  }
+  .linea .nivel{color:#ffee44;}
+  .small{
+    opacity:.7;
+    font-size:16px;
+    margin-top:10px;
+    letter-spacing:.05em;
+  }
+
+  #zonaBoton{
+    display:none;
+    padding:22px 14px 30px 14px;
+    text-align:left;
+  }
+  .btn-vigo{
+    display:inline-flex;align-items:center;gap:8px;
+    padding:12px 22px;background:#0d0d14;
+    border:1px solid #4a70a0;border-radius:8px;
+    color:#fff;font-family:var(--font);font-size:16px;
+    font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    cursor:pointer;transition:background .15s,border-color .15s;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .btn-vigo:active{background:#1a1a2a;}
+  .btn-vigo.activo{background:#4a70a0;border-color:#7aa0d0;}
+  .btn-vigo .punto{
+    display:inline-block;width:8px;height:8px;border-radius:50%;
+    background:#555566;
+  }
+  .btn-vigo.activo .punto{
+    background:#aaffaa;box-shadow:0 0 6px #aaffaa;
+  }
 </style>
 </head>
 <body>
-<h2>Estelas en Vigo</h2>
-<div id="estado" class="small">Cargando...</div>
-<div id="datos" style="display:none;">
-  <div class="linea">12 km: <span id="l12">--</span></div>
-  <div class="linea">11 km: <span id="l11">--</span></div>
-  <div class="linea">10 km: <span id="l10">--</span></div>
-  <br>
+
+<div id="titulo">ESTELAS</div>
+<div id="estado"><span class="spinner"></span> Cargando datos…</div>
+
+<div id="datos">
+  <div class="linea">12 km: <span class="nivel" id="l12">--</span></div>
+  <div class="linea">11 km: <span class="nivel" id="l11">--</span></div>
+  <div class="linea">10 km: <span class="nivel" id="l10">--</span></div>
   <div class="small">Riesgo general: <span id="risk">--</span></div>
   <div class="small" id="hora"></div>
 </div>
 
+<div id="zonaBoton">
+  <button id="btnVigo" class="btn-vigo" onclick="toggleVigo()">
+    <span class="punto"></span>
+    <span>Vigo</span>
+  </button>
+</div>
+
 <script>
-// Convierte RH sobre agua → RHi (sobre hielo) con Magnus
+const VIGO_LAT = 42.24;
+const VIGO_LON = -8.72;
+let modoVigo  = false;
+
+/* ── Conversión RH agua → RHi hielo (Magnus) ── */
 function toRHi(RHw, T_C) {
   const ew = 6.1078 * Math.exp(17.269 * T_C / (T_C + 237.29));
   const ei = 6.1078 * Math.exp(21.875 * T_C / (T_C + 265.5));
   return (RHw / 100) * (ew / ei) * 100;
 }
 
-// CPI: Schumann 1996, umbral 95% por sesgo seco ERA5
+/* ── Clasificación CPI (Schumann 1996) ── */
 function classify(T, RHw) {
   const RHi = toRHi(RHw, T);
   if (T > -40) return "NULA";
@@ -68,50 +148,105 @@ function riesgoGeneral(niveles) {
   return "NULA";
 }
 
-// Vigo: 42.24°N, -8.72°E
-const lat = 42.24;
-const lon = -8.72;
+/* ── GPS con timeout corto: si no responde, asumimos reloj ── */
+async function getLocationFromGPS() {
+  return new Promise((resolve) => {
+    if (!navigator.geolocation) { resolve(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      ()    => resolve(null),
+      { enableHighAccuracy: false, timeout: 3000, maximumAge: 60000 }
+    );
+  });
+}
 
-const url =
-  `https://api.open-meteo.com/v1/forecast`
-  +`?latitude=${lat}&longitude=${lon}`
-  +`&hourly=temperature_200hPa,temperature_225hPa,temperature_275hPa`
-  +`,relative_humidity_200hPa,relative_humidity_225hPa,relative_humidity_275hPa`
-  +`&timezone=Europe%2FMadrid&forecast_days=1`;
+function toggleVigo() {
+  modoVigo = !modoVigo;
+  document.getElementById('btnVigo').classList.toggle('activo', modoVigo);
+  cargar();
+}
 
-fetch(url)
-  .then(r => r.json())
-  .then(d => {
-    const h = d.hourly;
-    const hora = new Date().getHours();
+async function cargar() {
+  document.getElementById('datos').style.display  = 'none';
+  document.getElementById('estado').style.display = 'block';
+  document.getElementById('estado').innerHTML =
+    '<span class="spinner"></span> Cargando datos…';
 
-    // 12 km (~200 hPa)
-    const t12 = h.temperature_200hPa[hora], rh12 = h.relative_humidity_200hPa[hora];
+  try {
+    const gps = await getLocationFromGPS();
+    const soyMovil = gps !== null;
+
+    let url;
+    if (modoVigo) {
+      url = `/api/wind?lat=${VIGO_LAT}&lon=${VIGO_LON}&nosave=1&mode=estelas&t=${Date.now()}`;
+    } else if (soyMovil) {
+      url = `/api/wind?lat=${gps.lat}&lon=${gps.lon}&mode=estelas&t=${Date.now()}`;
+    } else {
+      url = `/api/wind?mode=estelas&t=${Date.now()}`;
+    }
+
+    const res  = await fetch(url, { cache: 'no-store' });
+    const json = await res.json();
+
+    if (!res.ok || json.error) {
+      mostrarError(json.error || `Error ${res.status}`);
+      return;
+    }
+
+    const h = json.hourly;
+    if (!h?.time) { mostrarError('Sin datos disponibles.'); return; }
+
+    // Hora local Madrid
+    const nowLocalStr = new Date().toLocaleString('en-US', { timeZone: 'Europe/Madrid' });
+    const nowLocal    = new Date(nowLocalStr);
+    const nowHour     = nowLocal.getHours();
+    const hoyKey      = nowLocal.getFullYear() + '-' +
+                        String(nowLocal.getMonth()+1).padStart(2,'0') + '-' +
+                        String(nowLocal.getDate()).padStart(2,'0');
+
+    let idx = h.time.findIndex(t => t.slice(0,10) === hoyKey && parseInt(t.slice(11,13)) === nowHour);
+    if (idx < 0) idx = nowHour;
+
+    const t12 = h.temperature_200hPa?.[idx] ?? 0;
+    const rh12= h.relative_humidity_200hPa?.[idx] ?? 0;
+    const t11 = h.temperature_225hPa?.[idx] ?? 0;
+    const rh11= h.relative_humidity_225hPa?.[idx] ?? 0;
+    const t10 = h.temperature_275hPa?.[idx] ?? 0;
+    const rh10= h.relative_humidity_275hPa?.[idx] ?? 0;
+
     const r12 = classify(t12, rh12);
-
-    // 11 km (~225 hPa)
-    const t11 = h.temperature_225hPa[hora], rh11 = h.relative_humidity_225hPa[hora];
     const r11 = classify(t11, rh11);
-
-    // 10 km (~275 hPa)
-    const t10 = h.temperature_275hPa[hora], rh10 = h.relative_humidity_275hPa[hora];
     const r10 = classify(t10, rh10);
 
-    document.getElementById("l12").textContent = r12;
-    document.getElementById("l11").textContent = r11;
-    document.getElementById("l10").textContent = r10;
+    document.getElementById("l12").textContent  = r12;
+    document.getElementById("l11").textContent  = r11;
+    document.getElementById("l10").textContent  = r10;
     document.getElementById("risk").textContent = riesgoGeneral([r12, r11, r10]);
 
     const now = new Date();
     document.getElementById("hora").textContent =
-      `${now.getHours().toString().padStart(2,"0")}:${now.getMinutes().toString().padStart(2,"0")}`;
+      `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 
-    document.getElementById("estado").style.display = "none";
-    document.getElementById("datos").style.display  = "block";
-  })
-  .catch(() => {
-    document.getElementById("estado").textContent = "Error cargando datos";
-  });
+    document.getElementById("estado").style.display     = "none";
+    document.getElementById("datos").style.display      = "block";
+    document.getElementById("zonaBoton").style.display  = "block";
+
+  } catch (e) {
+    mostrarError('Sin conexión o error de servidor.');
+    console.error(e);
+  }
+}
+
+function mostrarError(msg) {
+  document.getElementById('estado').style.display = 'block';
+  document.getElementById('estado').innerHTML = `
+    <div class="error-box">⚠️ ${msg}<br>
+      <span class="retry-btn" onclick="cargar()">↻ Reintentar</span>
+    </div>`;
+}
+
+cargar();
+setInterval(cargar, 10 * 60 * 1000);
 </script>
 </body>
 </html>
